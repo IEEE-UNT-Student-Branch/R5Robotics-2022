@@ -1,0 +1,343 @@
+/*
+ This sketch shows to integrate acceleration to obtain an estimate of velocity
+*/
+
+/* NOTE: 
+   1. The accelerometer MUST be calibrated to integrate its output. Adjust the 
+   AX, AY, AND AZ offsets until the sensor reads (0,0,GRAVITY) at rest.
+
+   2. REQUIRED UNITS:
+      I. The gyroscope must output: radians/second
+      II. The accelerometer output:  length/second^2  [The length unit is arbitrary. Can be meter, feet, etc]
+*/
+
+#include <basicMPU6050.h>   // Library for IMU sensor. See this link: https://github.com/RCmags/basicMPU6050
+#include <accIntegral.h>
+#include <imuFilter.h>
+#include <ADNS3080.h>
+//motor
+#include <Servo.h>
+#include <Arduino.h>
+#include <Wire.h>        // Instantiate the Wire library
+#include <TFLI2C.h>  
+
+int distancef;          //Necessary vars for sonar readings, setting speeds, etc.
+int distancel;
+
+TFLI2C tflI2C;
+Servo motor;            //Create ESC drive motor 'motor' and steering servo 'steer'
+Servo steer;
+
+
+int16_t  tfDist;    // distance in centimeters
+int16_t  tfAddrfront = TFL_DEF_ADR;  // Use this default I2C address 0
+int16_t  tfAddrleft = 0x11;  // Use this default I2C address
+int walldis = 70;
+
+int speedRead;          //Vars necessary to control the speed of the motor via the ESC.
+int speedRemap;
+int motorSpeed;
+int forwardSpeed=1570;
+int brakeSpeed=1001;
+int reverseSpeed=1400;
+int speedCenter = 1500;
+int reverse_time;
+
+const int neutral = 95;           //Steering servo positions for straight, left turns, and right turns. These can be changed and are set in degrees.
+const int steerRight = 55;
+const int steerLeft = 125;
+
+
+double base;
+// SPI pins
+#define PIN_RESET     9         
+#define PIN_CS        53       
+
+// sensor configuration 
+#define LED_MODE      false     // If true, enables LED Mode
+#define RESOLUTION    false     // If true, enable high resolution mode 
+
+ADNS3080 <PIN_RESET, PIN_CS> sensor;
+double DPI=5.869;
+// Initial position
+int x = 0;
+int y = 0;
+double disx=0;
+double disy=0;
+// ========== IMU sensor ==========
+#define         LP_FILTER   3           // Low pass filter.                    Value from 0 to 6
+#define         GYRO_SENS   0           // Gyro sensitivity.                   Value from 0 to 3
+#define         ACCEL_SENS  0           // Accelerometer sensitivity.          Value from 0 to 3
+#define         ADDRESS_A0  LOW         // I2C address from state of A0 pin.   A0 -> GND : ADDRESS_A0 = LOW
+                                        //                                     A0 -> 5v  : ADDRESS_A0 = HIGH
+// Accelerometer offset:
+constexpr int   AX_OFFSET =  552;       // Use these values to calibrate the accelerometer. The sensor should output 1.0g if held level. 
+constexpr int   AY_OFFSET = -241;       // These values are unlikely to be zero.
+constexpr int   AZ_OFFSET = -3185;
+
+//-- Set the template parameters:
+
+basicMPU6050<LP_FILTER,  GYRO_SENS,  ACCEL_SENS, ADDRESS_A0,
+             AX_OFFSET,  AY_OFFSET,  AZ_OFFSET
+            >imu;
+
+
+imuFilter fusion;
+
+constexpr float GRAVITY = 9.686e3;    //  mm/s^2    Magnitude of gravity at rest. Determines units of velocity. [UNITS MUST MATCH ACCELERATION]
+constexpr float SD_ACC  = 2000;      //  mm/s^2    Standard deviation of acceleration. Deviations from zero are suppressed.
+constexpr float ALPHA   = 4;       //            Gain of heading update - See example "output" for more information.
+          
+#define FUSION        true    /* Enable sensor fusion. Setting to "true" enables gravity correction */
+
+int direction=0;
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+  sensor.setup( LED_MODE, RESOLUTION );//adns3080
+
+  Wire.begin();//lidar connect
+  // calibrate IMU sensor ie mp6050
+  imu.setup();
+  imu.setBias();
+  
+  // Initialize filter: 
+  fusion.setup( imu.ax(), imu.ay(), imu.az() );     
+  fusion.rotateHeading( 0, SMALL_ANGLE );   // Can choose LARGE_ANGLE or SMALL_ANGLE approximation
+
+  steer.attach(7);  //steering
+  motor.attach(2, 1000, 2000);           //Attaches motor to pin 2
+  delay(100);                            
+}
+double angleCalc(){
+  fusion.update( imu.gx(), imu.gy(), imu.gz(), imu.ax(), imu.ay(), imu.az(),ALPHA, SD_ACC, GRAVITY );    
+  return fusion.yaw()*RAD_TO_DEG;
+}
+int lunaDistance(int16_t addr){
+  if(tflI2C.getData(tfDist, addr)){
+    return tfDist;
+  }
+  return-1;
+}
+void brake(){
+  motor.writeMicroseconds(brakeSpeed);
+  delay(100);
+  motor.writeMicroseconds(1500);
+}
+void reversebrake(){
+  motor.writeMicroseconds(1700);
+  delay(100);
+  motor.writeMicroseconds(1500);
+}
+void leftCorrect(double angle){
+  for(int i=neutral+1;i<110;i++){
+    double gyangle = angleCalc();
+    steer.write(i);
+    if(gyangle>angle-2){
+      break;
+    }
+  }
+}
+void rightCorrect(double angle){
+    for(int i=neutral-1;i>60;i--){
+    double gyangle = angleCalc();
+    steer.write(i);
+    if(gyangle<angle+2){
+      break;
+    }
+  }
+}
+void keepStraight(double angle){
+  double gyangle = angleCalc();
+  if(gyangle<angle-2){
+    leftCorrect(angle);
+  }
+  else if(gyangle>angle+2){
+    rightCorrect(angle);
+  }
+  else steer.write(neutral);
+}
+// void turnLeft(double turn){
+//   angleturn=angleCalc()+turn;
+//   if(angleturn>180){
+//     int temp=angleturn-180;
+//     angleturn=-180+temp;
+//   }
+//   while(angleCalc()<angleturn){
+//     steer.write(SteerLeft);
+//   }
+//   steer.write(netural);
+//   direction--;
+// }
+// void turnRight(double turn){//function to turn right at angle
+//   angleturn=angleCalc()+turn;
+//   if(angleturn>180){
+//     int temp=angleturn-180;
+//     angleturn=-180+temp;
+//   }
+//   while(angleCalc()>angleturn){
+//     steer.write(SteerRight);
+//   }
+//   steer.write(netural);
+//   direction++;
+// }
+void turnLeft90(){//function to turn right 90 degrees
+  double angleturn=angleCalc()+90;
+  if(angleturn>180){
+    int temp=angleturn-180;
+    angleturn=-180+temp;
+  }
+  motor.writeMicroseconds(1560);
+  while(angleCalc()<angleturn){
+    steer.write(steerLeft);
+  }
+  steer.write(neutral);
+  direction--;  
+}
+void turnRight90(){//function to turn right 90 degrees
+  double angleturn=angleCalc()-90;
+  if(angleturn>180){
+    int temp=angleturn-180;
+    angleturn=-180+temp;
+  }
+  motor.writeMicroseconds(1560);
+  while(angleCalc()>angleturn){
+    steer.write(steerRight);
+    updateMovement();
+  }
+  steer.write(neutral);
+  direction++;
+}
+int directionAng(){
+  //given driection %4 it will output the proper angle in radians
+  if(direction%4==0) return 0;
+  else if(direction%4==1) return 270;
+  else if(direction%4==2) return 180;
+  else if(direction%4==3) return 90;
+  else return-1;
+}
+void updateMovement(){
+  uint8_t  motion;      // Did motion occur? true or false
+  int8_t   dx, dy;      // Displacement since last function call
+  uint8_t  squal;       // Surface quality value - Larger value means better tracking. If below ~15 the displacement is dissabled. Adjust focus for 30 or more.
+  uint16_t shutter;     // Camera shutter rate in clock cycles.
+  uint8_t  max_pixel;   // Maximum pixel value of current frame (max brightness)
+
+  sensor.motionBurst( &motion, &dx, &dy, &squal, &shutter, &max_pixel );
+  x += -1*dx*cos(angleCalc()*DEG_TO_RAD);
+  y += -1*dy*sin(angleCalc()*DEG_TO_RAD);
+  disx=x/DPI;
+  disy=y/DPI;
+}
+void moveForward(int distance){
+  int movement=disx+disy;
+  double angle=directionAng()*DEG_TO_RAD;
+  uint8_t  motion;      // Did motion occur? true or false
+  int8_t   dx, dy;      // Displacement since last function call
+  uint8_t  squal;       // Surface quality value - Larger value means better tracking. If below ~15 the displacement is dissabled. Adjust focus for 30 or more.
+  uint16_t shutter;     // Camera shutter rate in clock cycles.
+  uint8_t  max_pixel;   // Maximum pixel value of current frame (max brightness)
+  sensor.motionBurst( &motion, &dx, &dy, &squal, &shutter, &max_pixel );
+  x += -1*dx*cos(directionAng()*DEG_TO_RAD);
+  y += -1*dy*sin(directionAng()*DEG_TO_RAD);
+  disx=x/DPI;
+  disy=y/DPI;
+  movement=disx+disy;
+  while(movement<distance){
+    keepStraight(angle);
+    motor.writeMicroseconds(forwardSpeed);
+    sensor.motionBurst( &motion, &dx, &dy, &squal, &shutter, &max_pixel );
+    y += -1*dx*cos(directionAng()*DEG_TO_RAD);
+    x += -1*dy*sin(directionAng()*DEG_TO_RAD);
+    disx=x/DPI;
+    disy=y/DPI;
+    movement=disx+disy;
+  }
+}
+void reverse(){
+  motor.writeMicroseconds(speedCenter);
+  delay(100);
+  motor.writeMicroseconds(brakeSpeed);
+  delay(100);
+  motor.writeMicroseconds(speedCenter);
+  delay(100);
+  motor.writeMicroseconds(reverseSpeed);
+  delay(100);
+  }
+void shimyLeft(){
+  steer.write(steerLeft);
+  reverse();
+  delay(300);
+  steer.write(steerRight);
+  reverse();
+  delay(600);
+  steer.write(neutral);
+  delay(100);
+  motor.writeMicroseconds(forwardSpeed);
+}
+void shimyRight(){
+  steer.write(steerRight);
+  reverse();
+  delay(450);
+  steer.write(steerLeft);
+  reverse();
+  delay(550);
+  steer.write(neutral);
+  delay(100);
+  motor.writeMicroseconds(forwardSpeed);
+}
+
+void loop() { 
+  steer.write(90);
+  motor.writeMicroseconds(1500);
+  delay(50);
+  //wait for drone to takeoff
+
+  //while photresistor is bright move foward, once dark, waitr for movement send from nano
+    //move out of box
+  //if touch and go wait for land and then takeoff
+  //wait for signal send from nano on box position  
+
+  //if coordinate is (300,400)
+  // moveForward(350);
+  // brake();
+  // turnLeft90();
+  // brake();
+  // moveForward(250);
+  // brake();
+  //take input from jetson on if need to move left or right
+
+
+  //example loop with values
+  //cord is (x,y);
+  // if(direction=)
+
+  // //testing
+  // moveForward(350);
+  // turnRight90();
+  // delay(100);
+  // turnLeft90();
+  // exit(0);
+  // steer.write(70);
+  // motor.writeMicroseconds(1500);
+  // // delay(2000);
+  // steer.write(100);
+  // motor.writeMicroseconds(1100);
+  // shimyRight();
+  // brake();
+  // shimyLeft();
+  // delay(2000);
+  // motor.writeMicroseconds(1500);
+  // delay(1000);
+
+
+
+
+  // delay(2000);
+  shimyLeft();
+  delay(800);
+  // shimyRight();
+  exit(0);
+  // delay(4000);
+  // shimyRight();
+}

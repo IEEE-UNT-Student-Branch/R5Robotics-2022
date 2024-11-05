@@ -1,0 +1,51 @@
+#include <Arduino.h>
+#include <Wire.h>        // Instantiate the Wire library
+#include <TFLI2C.h>      // TFLuna-I2C Library v.0.1.1
+#include <VL53L0X.h>
+
+VL53L0X sensor;
+
+TFLI2C tflI2C;
+
+int16_t  tfDist;    // distance in centimeters
+int16_t  tfAddr = TFL_DEF_ADR;  // Use this default I2C address
+#define HIGH_ACCURACY
+
+int lunaDistance(){
+  if(tflI2C.getData(tfDist, tfAddr)){
+    return tfDist;
+  }
+  return-1;
+}
+void setup()
+{
+  Serial.begin(9600);
+  Wire.begin();
+
+  sensor.setTimeout(500);
+  if (!sensor.init())
+  {
+    Serial.println("Failed to detect and initialize sensor!");
+    while (1) {}
+  }
+
+
+#if defined HIGH_ACCURACY
+  // increase timing budget to 200 ms
+  sensor.setMeasurementTimingBudget(200000);
+#endif
+}
+int irDistance(){
+  return sensor.readRangeSingleMillimeters();
+}
+
+int dist;
+void loop()
+{
+  
+  dist=lunaDistance()+100;
+  Serial.println("luna distance is "+String(dist)+" cm. and ir is "+irDistance()+"cm?");
+  // if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
+
+  // Serial.println();
+}

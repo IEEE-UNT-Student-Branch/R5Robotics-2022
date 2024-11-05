@@ -1,0 +1,10 @@
+PWM NOTES:
+https://github.com/adafruit/Adafruit_CircuitPython_PCA9685/blob/main/examples/pca9685_servo.py
+https://github.com/adafruit/Adafruit_CircuitPython_PCA9685/blob/main/adafruit_pca9685.py
+https://cdn-shop.adafruit.com/datasheets/PCA9685.pdf
+https://learn.adafruit.com/16-channel-pwm-servo-driver/python-circuitpython
+
+TF LUNA NOTES:
+https://github.com/budryerson/TFLuna-I2C_python/blob/main/tfli2c.py
+http://en.benewake.com/res/wuliu/docs/15978504093169389SJ-PM-TF-Luna%20A05%20Product%20Manual.pdf
+

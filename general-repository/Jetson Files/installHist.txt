@@ -1,0 +1,91 @@
+### OpenCV in the docker (depends on docker version and if OpenCV is preinstalled)
+## CHECK OPENCV MAKE INSTALL
+find / -name "*opencv*" (if a considerable amount of directories pop up, skip step 2)
+
+## Step 1 - INSTALL DJITELLOPY
+python3 -m pip install --upgrade pip
+pip install opencv-python==3.4.18.65 djitellopy
+
+## Step 2 - INSTALL OPENCV 4.5.0 THRU MAKE INSTALL
+# Guide: https://qengineering.eu/install-opencv-4.5-on-jetson-nano.html
+# Git: https://github.com/Qengineering/Install-OpenCV-Jetson-Nano
+pip uninstall opencv-python
+sudo apt install dphys-swapfile
+wget (opencv build sh file)
+chmod 775 (sh build file)
+./(sh build file)
+
+
+### Docker install Jetson.GPIO (best solution as of current) (https://forums.developer.nvidia.com/t/jetson-gpio-not-working-on-python-inside-the-container/180435)
+git clone https://github.com/Heerpa/jetson-gpio-nanohard.git
+cd jetson-gpio-nanohard/
+python3 setup.py install 
+
+
+### Base install Jetson.GPIO (works only outside docker)
+sudo apt install python3-pip
+sudo pip3 install Jetson.GPIO
+sudo groupadd -f -r gpio
+sudo useubuntu-portsrmod -a -G gpio $USER
+
+//If wget doesnt work, manually paste into a file from: https://github.com/Heerpa/jetson-gpio-nanohard/blob/master/lib/python/Jetson/GPIO/99-gpio.rules
+wget https://raw.githubusercontent.com/Heerpa/jetson-gpio-nanohard/master/lib/python/Jetson/GPIO/99-gpio.rules 
+
+sudo cp 99-gpio.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+
+### Install Jetson.GPIO in docker
+https://github.com/Heerpa/jetson-gpio-nanohard (Follow manual download)
+
+
+### Install Adafruit libraries for pca9685
+https://learn.adafruit.com/16-channel-pwm-servo-driver/python-circuitpython
+pip install adafruit-circuitpython-pca9685
+nano /usr/local/lib/python3.6/dist-packages/adafruit_pca9685.py
+(go to line 141 and change it to "self.i2c_device = i2c_device.I2CDevice(i2c_bus, address, False)")
+# This will skip the program from probing for the PCA board, making it ALOT faster
+
+
+### TFLI2C pip modification
+docker cp tftello:/usr/local/lib/python3.6/dist-packages/tfli2c/__init__.py . (to make the init modifications)
+
+
+### (OPTIONAL) SPI connections with ADNS3080
+https://jetsonhacks.com/2020/05/04/spi-on-jetson-using-jetson-io/
+https://www.forecr.io/blogs/connectivity/how-to-test-spi-interface-on-dsboard-nx2-with-nano-in-c
+
+
+### UART disable login
+# Note: The Nano default install has a service that allows login through UART. This screws up proper Serial comms, so disable this.
+systemctl disable nvgetty
+reboot  
+
+
+### If sudo apt update does not work 
+(https://superuser.com/questions/677343/how-to-make-name-server-address-permanent-in-etc-resolv-conf)
+(https://askubuntu.com/questions/29071/apt-get-update-cannot-find-ubuntu-servers)
+(https://forums.developer.nvidia.com/t/jetson-nano-sudo-apt-get-update-not-working-help/112980/13)
+sudo gedit /etc/resolv.conf
+(add "nameserver 8.8.8.8" and "nameserver 8.8.4.4")
+
+sudo gedit /etc/apt/sources.list
+(every instance of "us.archive.ubuntu.com/ubuntu" must change to "ports.ubuntu.com/ubuntu-ports")
+
+
+### Enable native Nano VNC (How to set to autorun on boot: https://developer.nvidia.com/embedded/learn/tutorials/vnc-setup)
+# Note: Vino is shit, so use x11vnc
+gsettings set org.gnome.Vino prompt-enabled true (enables vino)
+/usr/lib/vino/vino-server (starts vino)
+gsettings list-keys org.gnome.Vino (see all vino configs)
+
+
+### Enable X11VNC
+# "Windows" Ethernet setting must be enabled to allow direct SSH (up/down arrow in the top right corner)
+x11vnc -auth guess -display :0
+(connect to 192.168.95.1:0 when connecting through direct SSH)
+(connect to 192.168.100.100:0 when connecting through the Zyxel)
+(connect to 192.168.8.140:0 when connecting through either of the Mangos)
+
+
+### ROS installs

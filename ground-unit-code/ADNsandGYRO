@@ -1,0 +1,113 @@
+
+
+#include <basicMPU6050.h>   // Library for IMU sensor. See this link: https://github.com/RCmags/basicMPU6050
+#include <accIntegral.h>
+#include <imuFilter.h>
+
+// #include <JY901.h>
+#include <ADNS3080.h>
+
+// SPI pins
+#define PIN_RESET     9         
+#define PIN_CS        53       
+
+// sensor configuration 
+#define LED_MODE      false     // If true, enables LED Mode
+#define RESOLUTION    false     // If true, enable high resolution mode 
+
+ADNS3080 <PIN_RESET, PIN_CS> sensor;
+
+// Initial position
+int x = 0;
+int y = 0;
+double disx=0;
+double disy=0;
+// ========== IMU sensor ==========
+
+// Gyro settings:
+#define         LP_FILTER   3           // Low pass filter.                    Value from 0 to 6
+#define         GYRO_SENS   0           // Gyro sensitivity.                   Value from 0 to 3
+#define         ACCEL_SENS  0           // Accelerometer sensitivity.          Value from 0 to 3
+#define         ADDRESS_A0  LOW         // I2C address from state of A0 pin.   A0 -> GND : ADDRESS_A0 = LOW
+                                        //                                     A0 -> 5v  : ADDRESS_A0 = HIGH
+// Accelerometer offset:
+constexpr int   AX_OFFSET =  552;       // Use these values to calibrate the accelerometer. The sensor should output 1.0g if held level. 
+constexpr int   AY_OFFSET = -241;       // These values are unlikely to be zero.
+constexpr int   AZ_OFFSET = -3185;
+
+//-- Set template parameters:
+#define GAIN          0.6     /* Fusion gain, value between 0 and 1 - Determines orientation correction with respect to gravity vector. 
+                                 If set to 1 the gyroscope is dissabled. If set to 0 the accelerometer is dissabled (equivant to gyro-only) */
+
+#define SD_ACCEL      0.2
+basicMPU6050<LP_FILTER,  GYRO_SENS,  ACCEL_SENS, ADDRESS_A0,
+             AX_OFFSET,  AY_OFFSET,  AZ_OFFSET
+            >imu;
+
+// =========== Settings ===========
+imuFilter fusion;
+
+// Filter coefficients               //  Unit           
+constexpr float GRAVITY = 9.81e3;    //  mm/s^2    Magnitude of gravity at rest. Determines units of velocity. [UNITS MUST MATCH ACCELERATION]
+constexpr float SD_ACC  = 1000;      //  mm/s^2    Standard deviation of acceleration. Deviations from zero are suppressed.
+constexpr float SD_VEL  = 200;       //  mm/s      Standard deviation of velocity. Deviations from target value are suppressed.
+constexpr float ALPHA   = 0.6;       //            Gain of heading update - See example "output" for more information.
+// Sensor scaling
+constexpr float TO_LENGTH_PER_SECOND_SQ = GRAVITY;     // Constant to convert acceleration measurements to:  length/second^2
+constexpr float TO_RAD_PER_SECOND = 1.0;               // Constant to convery gyroscope measurements to:     radians/second
+
+
+double angle=0;
+double offx=0;
+double anglebl=0;
+
+void setup() {
+  Serial.begin(57600);
+  delay(1000);
+  sensor.setup( LED_MODE, RESOLUTION );
+
+  // calibrate IMU sensor
+  imu.setup();
+  imu.setBias();
+    fusion.setup( imu.ax(), imu.ay(), imu.az() );     
+                  
+  // Rotate heading:
+  float angle = 90 * DEG_TO_RAD;                // angle in radians to rotate heading about z-axis
+  fusion.rotateHeading( angle, LARGE_ANGLE );   // Can choose LARGE_ANGLE or SMALL_ANGLE approximation                         
+}
+double offang=0;
+void loop() {   
+  
+  fusion.update( imu.gx(), imu.gy(), imu.gz());  
+  Serial.print( fusion.yaw()*RAD_TO_DEG );
+  uint8_t  motion;      // Did motion occur? true or false
+  int8_t   dx, dy;      // Displacement since last function call
+  uint8_t  squal;       // Surface quality value - Larger value means better tracking. If below ~15 the displacement is dissabled. Adjust focus for 30 or more.
+  uint16_t shutter;     // Camera shutter rate in clock cycles.
+  uint8_t  max_pixel;   // Maximum pixel value of current frame (max brightness)
+
+  sensor.motionBurst( &motion, &dx, &dy, &squal, &shutter, &max_pixel );
+  x += -1*dx*cos(angle*DEG_TO_RAD);
+  y += 1*dy*sin(angle*DEG_TO_RAD);
+  disx=x/5.869;//5.869 is DPI
+  disy=y/5.869;
+
+
+  Serial.print( " squal=" );
+  Serial.print( squal );
+  Serial.print( " dx=" );
+  Serial.print( dx );
+  Serial.print( " dy=" );
+  Serial.print( dy );
+  Serial.print( " x=" );
+  Serial.print( x );
+  Serial.print( " y=" );
+  Serial.print( y );
+  Serial.print( " dpx=" );
+  Serial.print( disx );
+  Serial.print( " dpy=" );
+  Serial.print( disy );
+  Serial.print( " angle=");
+  Serial.print(String(angle));
+  Serial.println();
+}

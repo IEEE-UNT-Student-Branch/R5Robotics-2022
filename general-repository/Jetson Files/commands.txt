@@ -1,0 +1,46 @@
+//Note: When working with cameras, ALWAYS reboot after connecting cameras
+
+
+/// Begin docker container and attach shit
+xhost + ; nvidia-docker run -it --name tftello --runtime nvidia --network host --gpus all --privileged -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v /tmp/argus_socket:/tmp/argus_socket kevinfham/jetsonr5:tftelloV3_ros
+
+
+/// Reconnect after "exit"
+xhost + ; nvidia-docker start tftello ; sudo nvidia-docker attach tftello
+//or
+xhost + ; nvidia-docker start -a tftello
+//Note: Recommended to use below method 
+
+
+/// Quit Docker without stopping due to "exit"
+Ctrl+P, Ctrl+Q
+(reconnect using sudo nvidia-docker attach tftello)
+
+
+/// Commit changes to docker repo (requires login)
+sudo docker commit tftello kevinfham/jetsonr5:tftelloV2
+sudo docker push kevinfham/jetsonr5:tftelloV2
+
+
+/// Check device performance stats
+tegrastats
+nvidia-smi (unsupported on tegra platforms such as the Nano)
+
+
+/// Check available CUDA devices
+// https://forums.developer.nvidia.com/t/find-the-gpu-information/182768
+cd /usr/local/cuda/samples/1_Utilities/deviceQuery
+./deviceQuery
+
+
+///Check connected i2c devices
+//Note: Pins 27/28 are SDA/SCL for port 0; 3/5 are SDA/SCL for port 1
+i2cdetect -r -y #	(# is either port 0 or 1)
+
+
+/// Enable X11VNC
+//Note: "Windows" Ethernet setting must be enabled to allow direct SSH (up/down arrow in the top right corner)
+x11vnc -auth guess -display :0
+(connect to 192.168.95.1:0 when connecting through direct SSH)
+(connect to 192.168.100.100:0 when connecting through the Zyxel)
+(connect to 192.168.8.140:0 when connecting through either of the Mangos)

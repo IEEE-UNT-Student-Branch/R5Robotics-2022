@@ -1,0 +1,23 @@
+//For Jetson Nano
+git clone https://github.com/JetsonHacksNano/installROS.git
+
+
+//ROS
+source /opt/ros/melodic/setup.bash
+
+cd ~/Desktop/installROS
+./setupCatkinWorkspace.sh <workspace location>
+cd <workspace location>/src
+git clone <git project>
+
+cd ..
+rosws init
+catkin_make (catkin_make install?)
+
+echo "source <workspace location>/devel/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+
+
+//Misc
+sudo chown -R $USER ~/.ros
+git clone https://github.com/Slamtec/rplidar_ros.git

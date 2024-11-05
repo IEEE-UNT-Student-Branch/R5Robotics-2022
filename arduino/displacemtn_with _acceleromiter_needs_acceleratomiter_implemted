@@ -1,0 +1,74 @@
+#define vi_time_mil 10     
+#define vi_time_sec 0.01  
+#define distace_time_mil 20  
+#define distance_time_sec 0.2   
+
+unsigned long time; // creating variable for time will associtaed iwth millis
+unsigned long time_sec = time*0.001;
+unsigned long pervious_time_vi = 0;
+unsigned long pervious_time_distance = 0;
+int vX = 0; // Velocities
+int vY = 0;  
+int vXi = 0; // Inital velocites
+int vYi = 0;
+int dx = 0;  // creating variable for distance
+int dy = 0;
+int aY = 0;  // this will be the acceleration gathered from the MPU
+int aX = 0;
+
+int distance_x(){  
+  if ((vXi == 0)&&(aX != 0)){
+    dx = 0.5*aX*pow(distance_time_sec, 2);
+  }
+  else if ((vXi != 0) && (aX != 0)){
+    dx = vXi*time_sec + 0.5*aX*pow(distance_time_sec, 2);
+  }
+  else if ((vX != 0) && (aX == 0)){
+    dx = ((vXi + vX)/2*distance_time_sec);
+  }
+  return dx;
+}
+
+int distance_y(){  
+  if ((vYi == 0)&&(aY != 0)){
+    dy = 0.5*aY*pow(distance_time_sec, 2);
+  }
+  else if ((vY != 0) && (aX != 0)){
+    dy = vYi*time_sec + 0.5*aY*pow(distance_time_sec, 2);
+  }
+  else if ((vY != 0) && (aY == 0)){
+    dy = (vYi + vY)/2;
+  }
+  return dy;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+}
+
+void loop() {
+  time = millis();
+
+  if (time - pervious_time_vi >= vi_time_mil) {
+    if (aY != 0){
+    vYi = aY*vi_time_sec;
+    }
+    if (aX != 0){
+    vXi = aX*vi_time_sec;
+    }
+    if((aY == 0)&&(aX == 0)){
+      exit(1);
+    }
+    pervious_time_vi = vi_time_sec;
+  }
+
+  if (time - pervious_time_distance >= vi_time_mil){
+    distance_x();
+    Serial.print('X distance: ');
+    Serial.println(distance_x());
+    distance_y();
+    Serial.print('Y distance: ');
+    Serial.println(distance_y());
+  }
+}
