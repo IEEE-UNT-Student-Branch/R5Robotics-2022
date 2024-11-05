@@ -2,14 +2,14 @@
 
 Took out from the UNT CSE Gitlab for ease of access
 
-### /arduino
+### `/arduino`
 
 Loose Arduino code
 
-### /general-repository
+### `/general-repository`
 
 Python code for the Jetson Nano
 
-### /ground-unit-code
+### `/ground-unit-code`
 
 Arduino code used for competition
