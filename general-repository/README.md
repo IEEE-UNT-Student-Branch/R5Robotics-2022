@@ -14,5 +14,5 @@ Not all the code used for competition is kept here. The final version of the com
 
 https://hub.docker.com/repository/docker/kevinfham/jetsonr5/general
 
-Pull from the `tftelloV3_ros` image
+Pull from the `tftelloV3_ros` image and you'll find it in the `/home` directory
 
